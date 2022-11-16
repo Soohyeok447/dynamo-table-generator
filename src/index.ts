@@ -147,15 +147,19 @@ const receiver = async () => {
     throw Error('Duplicated table name exists');
   }
 
-  const { useSortKey } = await questions.useSortKey();
-
   const { partitionKeyName, partitionKeyType } = await questions.partitionKeyQuestion();
 
   if (!partitionKeyName) {
     throw Error('Partition Key name must be set');
   }
 
+  const { useSortKey } = await questions.useSortKey();
+
   const { sortKeyName, sortKeyType } = useSortKey ? await questions.sortKeyQuestion() : { sortKeyName: null, sortKeyType: null };
+
+  if (!sortKeyName) {
+    throw Error('Sort Key name must be set');
+  }
 
   const tableParams = {
     TableName: tableName + '-' + environment,
