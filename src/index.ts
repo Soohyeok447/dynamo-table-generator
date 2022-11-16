@@ -210,9 +210,9 @@ const receiver = async () => {
   console.log(tableParams);
 
   // create a table
-  client.createTable(tableParams, function (err, data) {
+  client.createTable(tableParams, (err, data) => {
     if (err) {
-      console.log('Error', err);
+      console.log(err);
 
       throw Error('Failed to create a table');
     } else {
