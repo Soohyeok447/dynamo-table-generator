@@ -1,6 +1,6 @@
 {
   "name": "dynamo-table-generator",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Generator for creating a table for DynamoDB",
   "main": "index.js",
   "scripts": {

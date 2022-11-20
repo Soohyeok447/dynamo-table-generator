@@ -4,6 +4,10 @@ import inquirer from 'inquirer';
 import dotenv from 'dotenv';
 dotenv.config();
 
+const version = '0.1.2';
+
+console.log(version);
+
 //TODO env파일을 직접 손봐서 환경변수를 불러오는게 맘에 안든다
 //TODO AWS credential을 일반적으로 credential 파일이 저장되는 곳에서 한번 불러와보고 있으면 그 정보들을 활용하고
 //TODO 없으면 사용자에게 hidden field로 입력을 받아서 같은 디렉토리에 해싱한 후 새로운 credential 파일로 저장한 걸 계속 사용하도록 하면 어떨까
@@ -67,6 +71,9 @@ const questions = {
         type: 'input',
         name: 'tableName',
         message: 'What is the name of the table?',
+        filter(input: string) {
+          return input.trim();
+        },
       },
     ];
 
@@ -95,6 +102,9 @@ const questions = {
         type: 'input',
         name: 'partitionKeyName',
         message: 'What is the name of the Partition key?',
+        filter(input: string) {
+          return input.trim();
+        },
       },
       {
         type: 'list',
@@ -116,6 +126,9 @@ const questions = {
         type: 'input',
         name: 'sortKeyName',
         message: 'What is the name of the Sort key?',
+        filter(input: string) {
+          return input.trim();
+        },
       },
       {
         type: 'list',
@@ -130,42 +143,59 @@ const questions = {
 
     return inquirer.prompt(question);
   },
+
+  billingModeQuestion: () => {
+    const question = [
+      {
+        list: 'list',
+        name: 'billingMode',
+        message: 'What is the Billing Mode you want?',
+        choices: ['OnDemand', 'Provisioned'],
+        filter(selected: string) {
+          return selected === 'OnDemand' ? 'PAY_PER_REQUEST' : 'PROVISIONED';
+        },
+      },
+    ];
+
+    return inquirer.prompt(question);
+  },
 };
 
 const receiver = async () => {
-  const { environment } = await questions.environmentQuestion();
+  try {
+    const { environment } = await questions.environmentQuestion();
 
-  const { tableName } = await questions.tableNameQuestion();
+    const { tableName } = await questions.tableNameQuestion();
 
-  if (!tableName) {
-    throw Error('Table name must be set');
-  }
+    if (!tableName) {
+      throw Error('Table name must be set');
+    }
 
-  const tableList = await client.listTables().promise();
+    const tableList = await client.listTables().promise();
 
-  if (tableList.TableNames?.includes(tableName + '-' + environment)) {
-    throw Error('Duplicated table name exists');
-  }
+    if (tableList.TableNames?.includes(tableName + '-' + environment)) {
+      throw Error('Duplicated table name exists');
+    }
 
-  const { partitionKeyName, partitionKeyType } = await questions.partitionKeyQuestion();
+    const { partitionKeyName, partitionKeyType } = await questions.partitionKeyQuestion();
 
-  if (!partitionKeyName) {
-    throw Error('Partition Key name must be set');
-  }
+    if (!partitionKeyName) {
+      throw Error('Partition Key name must be set');
+    }
 
-  const { useSortKey } = await questions.useSortKey();
+    const { useSortKey } = await questions.useSortKey();
 
-  const { sortKeyName, sortKeyType } = useSortKey ? await questions.sortKeyQuestion() : { sortKeyName: null, sortKeyType: null };
+    const { sortKeyName, sortKeyType } = useSortKey ? await questions.sortKeyQuestion() : { sortKeyName: null, sortKeyType: null };
 
-  if (!sortKeyName) {
-    throw Error('Sort Key name must be set');
-  }
+    if (useSortKey && !sortKeyName) {
+      throw Error('Sort Key name must be set');
+    }
 
-  const tableParams = {
-    TableName: tableName + '-' + environment,
-    KeySchema:
-      /* eslint-disable prettier/prettier */
-      useSortKey
+    // const { billingMode } = await questions.billingModeQuestion();
+
+    const tableParams = {
+      TableName: tableName + '-' + environment,
+      KeySchema: useSortKey
         ? [
           {
             AttributeName: partitionKeyName,
@@ -183,8 +213,7 @@ const receiver = async () => {
           },
         ],
 
-    AttributeDefinitions:
-      useSortKey
+      AttributeDefinitions: useSortKey
         ? [
           {
             AttributeName: partitionKeyName,
@@ -201,28 +230,31 @@ const receiver = async () => {
             AttributeType: partitionKeyType,
           },
         ],
-    BillingMode: 'PAY_PER_REQUEST', // 'PROVISIONED' 어떻게 auto scaling을 달지?
-    // ProvisionedThroughput: {
-    //   ReadCapacityUnits: 1,
-    //   WriteCapacityUnits: 1,
-    // },
-    StreamSpecification: {
-      StreamEnabled: false,
-    },
-  };
+      BillingMode: 'PAY_PER_REQUEST', // 'PROVISIONED' 어떻게 auto scaling을 달지?
+      // ProvisionedThroughput:
+      // {
+      //   ReadCapacityUnits: 1,
+      //   WriteCapacityUnits: 1,
+      // },
+      StreamSpecification: {
+        StreamEnabled: false,
+      },
+    };
 
-  console.log(tableParams);
+    console.log(tableParams);
 
-  // create a table
-  client.createTable(tableParams, (err, data) => {
-    if (err) {
-      console.log(err);
+    // create a table
 
-      throw Error('Failed to create a table');
-    } else {
-      console.log('Table Created', data);
-    }
-  });
+    const result = await client.createTable(tableParams).promise();
+
+    const tableId = result.TableDescription?.TableId;
+
+    console.log(tableId);
+  } catch (err) {
+    console.log('Error', err);
+
+    new Error('Cannot create a table');
+  }
 };
 
-app.version('0.1.0').description('A CLI for creating a table for DynamoDB').action(receiver).parse(process.argv);
+app.version(version).description('A CLI for creating a table for DynamoDB').action(receiver).parse(process.argv);
